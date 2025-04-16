@@ -278,8 +278,18 @@
             color: #ecf0f1;
         }
 
-        body.dark button:hover {
-            background-color: #2c3e50;
+        body.dark #start-button {
+            background-color: #3498db;
+            color: white;
+        }
+
+        body.dark #start-button:hover {
+            background-color: #2980b9;
+        }
+
+        body.dark .button-container button {
+            background-color: #3498db;
+            color: white;
         }
 
         body.dark #type-buttons button.selected {
@@ -302,6 +312,40 @@
 
         body.dark h1 {
             color: #f1c40f; /* Bright yellow for the main title in dark mode */
+        }
+
+        #counter-display {
+            position: relative;
+            margin-bottom: 20px;
+            font-size: 1.5em;
+            font-weight: bold;
+            color: #3498db;
+            text-align: center;
+        }
+
+        body.dark #counter-display {
+            color: #ecf0f1;
+        }
+
+        #success-screen {
+            display: none;
+            text-align: center;
+            animation: fadeIn 0.5s ease-in;
+        }
+
+        #success-screen h2 {
+            color: #2ecc71;
+            font-size: 2.5em;
+            margin-bottom: 20px;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        .button-container {
+            margin-top: 20px;
         }
     </style>
 </head>
@@ -347,16 +391,22 @@
 
     <div id="page-2" class="game-container hidden">
         <button id="back-button" onclick="goBack()">Back</button>
-        <div class="card-container" onclick="toggleCard()">
-            <div id="flashcard" class="card">
+        <div id="counter-display">Cards: 0/45</div>
+        <div class="card-container">
+            <div onclick="toggleCard()" id="flashcard" class="card">
                 <div class="card-face card-front" id="card-front"></div>
                 <div class="card-face card-back" id="card-back"></div>
             </div>
         </div>
-        <div>
-            <button onclick="recordFailure()">I failed :(</button>
+        <div class="button-container">
             <button onclick="recordSuccess()">I got it :)</button>
         </div>
+    </div>
+
+    <div id="success-screen" class="game-container hidden">
+        <h2>Congratulations! 🎉</h2>
+        <p>You've completed all 45 cards!</p>
+        <button onclick="returnToMenu()">Return to Menu</button>
     </div>
 
     <script>
@@ -370,24 +420,18 @@
         let currentTranslation = '';
         let nextWordData = null; // Preloaded next word and translation
         let successCount = 0;
-        let failureCount = 0;
+        let cardCounter = 0;
+        let lastCard = null; // Add this variable to track the last card
 
         // Spaced repetition system
         const cardQueue = []; // Queue of cards to show
-        const failedCards = []; // Cards that need to be repeated more often
 
-        // Expanded voice pool with different nationalities and accents
+        // French Canadian voice pool
         const voices = [
-            { languageCode: 'fr-FR', name: 'fr-FR-Wavenet-A' }, // French (France)
-            { languageCode: 'fr-FR', name: 'fr-FR-Wavenet-B' }, // French (France)
-            { languageCode: 'fr-FR', name: 'fr-FR-Wavenet-C' }, // French (France)
-            { languageCode: 'fr-FR', name: 'fr-FR-Wavenet-D' }, // French (France)
             { languageCode: 'fr-CA', name: 'fr-CA-Wavenet-A' }, // French (Canada)
             { languageCode: 'fr-CA', name: 'fr-CA-Wavenet-B' }, // French (Canada)
             { languageCode: 'fr-CA', name: 'fr-CA-Wavenet-C' }, // French (Canada)
             { languageCode: 'fr-CA', name: 'fr-CA-Wavenet-D' }, // French (Canada)
-            { languageCode: 'fr-FR', name: 'fr-FR-Standard-A' }, // African French (Standard)
-            { languageCode: 'fr-FR', name: 'fr-FR-Standard-B' }, // African French (Standard)
         ];
 
         function selectType(type) {
@@ -430,48 +474,54 @@
         }
 
         async function startGame() {
+            cardCounter = 0;
+            document.getElementById('counter-display').textContent = 'Cards: 0/45';
             if (selectedType === 'number') {
-                generateRandomNumbers(); // Generate random numbers for the cards
-                initializeCardQueue(); // Initialize the card queue for numbers
-                preloadNextWord(); // Preload the first number
+                generateRandomNumbers(); // This already generates 15 numbers
+                initializeCardQueue();
+                preloadNextWord();
                 document.getElementById('page-1').classList.add('hidden');
-                document.getElementById('page-2').classList.remove('hidden'); // Show game screen
-                nextWord(); // Load the first number immediately
-                return; // Skip fetching data for numbers
+                document.getElementById('page-2').classList.remove('hidden');
+                nextWord();
+                return;
             }
+            
             document.getElementById('page-1').classList.add('hidden');
-            document.getElementById('loading-screen').style.display = 'block'; // Show loading screen
+            document.getElementById('loading-screen').style.display = 'block';
+            
             try {
                 const response = await fetch(apiUrl);
                 const data = await response.json();
-                allCards = filterWordsByDifficulty(data);
+                const filteredCards = filterWordsByDifficulty(data);
+                // Select only 15 random cards from the filtered set
+                allCards = getRandomCards(filteredCards, 15);
+                
                 if (allCards.length > 0) {
-                    initializeCardQueue(); // Initialize the card queue
-                    preloadNextWord(); // Preload the first word
+                    initializeCardQueue();
+                    preloadNextWord();
                     setTimeout(() => {
-                        document.getElementById('loading-screen').style.display = 'none'; // Hide loading screen
-                        document.getElementById('page-2').classList.remove('hidden'); // Show game screen
-                        nextWord(); // Load the first word immediately
-                    }, 1000); // Simulate a short delay for loading
+                        document.getElementById('loading-screen').style.display = 'none';
+                        document.getElementById('page-2').classList.remove('hidden');
+                        nextWord();
+                    }, 1000);
                 } else {
                     throw new Error('No words available for the selected difficulty.');
                 }
             } catch (error) {
                 console.error("Fetch Error:", error);
-                document.getElementById('loading-screen').style.display = 'none'; // Hide loading screen on error
+                document.getElementById('loading-screen').style.display = 'none';
                 alert("Failed to load words. Please try again.");
             }
         }
 
         function initializeCardQueue() {
             cardQueue.length = 0; // Clear the queue
-            failedCards.length = 0; // Clear failed cards
             allCards.forEach(card => cardQueue.push({ card, interval: 1 })); // Add all cards with an initial interval of 1
         }
 
         function generateRandomNumbers() {
             allCards = [];
-            for (let i = 0; i < 20; i++) { // Generate 20 random numbers
+            for (let i = 0; i < 15; i++) { // Generate 15 random numbers
                 const randomNumber = Math.floor(Math.random() * Math.pow(10, selectedDigits));
                 allCards.push({ word: randomNumber.toString(), translation: randomNumber.toString() });
             }
@@ -479,9 +529,15 @@
 
         async function preloadNextWord() {
             if (allCards.length > 0) {
-                const nextCard = allCards[Math.floor(Math.random() * allCards.length)]; // Randomly select a card
+                let nextCard;
+                do {
+                    nextCard = allCards[Math.floor(Math.random() * allCards.length)];
+                } while (nextCard === lastCard && allCards.length > 1);
+                
+                lastCard = nextCard; // Store the selected card
+
                 if (selectedType === 'number') {
-                    nextWordData = { word: nextCard.word, translation: nextCard.translation }; // Same number on both sides
+                    nextWordData = { word: nextCard.word, translation: nextCard.translation };
                 } else if (selectedType === 'sentence') {
                     const sentenceColumn = getSentenceColumn();
                     const sentence = nextCard[sentenceColumn]?.trim();
@@ -526,30 +582,48 @@
             }, 300); // Reduce delay to 300ms for faster appearance
         }
 
-        function recordFailure() {
-            failureCount++;
-            console.log(`Failures: ${failureCount}`);
-            const failedCard = cardQueue.shift(); // Remove the current card from the queue
-            failedCards.push(failedCard); // Add it to the failed cards list
-            cardQueue.push(failedCard); // Re-add it to the end of the queue for repetition
-            nextWord();
+        function updateCounter() {
+            cardCounter++;
+            document.getElementById('counter-display').textContent = `Cards: ${cardCounter}/45`;
+            
+            if (cardCounter >= 45) {
+                setTimeout(showSuccessScreen, 500);
+            }
+        }
+
+        function showSuccessScreen() {
+            document.getElementById('page-2').classList.add('hidden');
+            document.getElementById('success-screen').classList.remove('hidden');
+            document.getElementById('success-screen').style.display = 'block';
+        }
+
+        function returnToMenu() {
+            document.getElementById('success-screen').style.display = 'none';
+            document.getElementById('success-screen').classList.add('hidden');
+            document.getElementById('page-1').classList.remove('hidden');
+            cardCounter = 0;
+            document.getElementById('counter-display').textContent = 'Cards: 0/45';
+            successCount = 0;
         }
 
         function recordSuccess() {
             successCount++;
-            console.log(`Successes: ${successCount}`);
-            const succeededCard = cardQueue.shift(); // Remove the current card from the queue
-            succeededCard.interval *= 2; // Double the interval for successful cards
-            setTimeout(() => cardQueue.push(succeededCard), succeededCard.interval * 1000); // Re-add it after the interval
-            nextWord();
+            updateCounter();
+            if (cardCounter < 45) {
+                const succeededCard = cardQueue.shift(); // Remove the current card from the queue
+                succeededCard.interval *= 2; // Double the interval for successful cards
+                setTimeout(() => cardQueue.push(succeededCard), succeededCard.interval * 1000); // Re-add it after the interval
+                nextWord();
+            }
         }
 
         function goBack() {
+            cardCounter = 0;
+            document.getElementById('counter-display').textContent = 'Cards: 0/45';
             document.getElementById('page-2').classList.add('hidden'); // Hide game page
             document.getElementById('page-1').classList.remove('hidden'); // Show settings page
-            console.log(`Final Score - Successes: ${successCount}, Failures: ${failureCount}`);
+            console.log(`Final Score - Successes: ${successCount}`);
             successCount = 0; // Reset counters
-            failureCount = 0;
         }
 
         function getSentenceColumn() {
@@ -566,6 +640,11 @@
             }
             const sentenceColumn = getSentenceColumn();
             return data.filter(row => row[selectedDifficulty]?.trim() || row[sentenceColumn]?.trim());
+        }
+
+        function getRandomCards(cards, count) {
+            let shuffled = [...cards].sort(() => 0.5 - Math.random());
+            return shuffled.slice(0, count);
         }
 
         async function translateWord(word) {
